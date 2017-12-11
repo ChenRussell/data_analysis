@@ -27,7 +27,7 @@ import org.jgap.xml.XMLManager;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.w3c.dom.Document;
 
-public class GAUtils {
+public class GAUtils2 {
 
 	private static JdbcTemplate jdbcTemplate;
 
@@ -36,15 +36,25 @@ public class GAUtils {
 	private static final String dbUser = "root";
 	private static final String dbPassword = "123456";
 
-	private static double value = 0; // 存储不需要调整的其余项的和的两项的差
-	private static List<Double> gaList = new ArrayList<Double>(); // 存储需要调整的项的和
-	private static List<HashMap<String,Double>> gaMap_List = new ArrayList<HashMap<String, Double>>();
+	private static double value; // 存储不需要调整的其余项的和的两项的差
+	private static List<Double> gaList; // 存储需要调整的项的和
+	private static List<CondGene> gaValueList; // 存储需要调整的项的和,新增的
+
 	private static Map<String, Double> gaMap = new HashMap<String, Double>(); // 存储遗传算法调整后的权值,乘以原始系数得到调整后的系数
-	private static Map<String, Double> gaMap_adjust = new HashMap<String, Double>(); // 存储调整后的系数值
+	private static Map<String, Double> gaMap_adjust; // 存储调整后的系数值
 	private static int flag; // gaList第一项的个数
 
 	private static List<Map<String, Object>> list3; // 存储科室一对应的完整信息，用来重新计算求和
 	private static List<Map<String, Object>> list4;
+
+	private static int gennum; // 基因个数
+
+	private static Map<String, Integer> idmap = new HashMap<String, Integer>(); // 存储id和基因位置的映射
+	private static Map<String, Double> weight_map = new HashMap<String, Double>(); // 存储id和基因位置的映射
+
+	private static List<CondExpress> condlist = new ArrayList<CondExpress>(); // 存储多个约束条件对应的数据
+
+	private static int counter = 0; // 基因个数计数器
 
 	public static JdbcTemplate getJdbcTemplate() {
 		BasicDataSource dataSource = new BasicDataSource();
@@ -60,11 +70,6 @@ public class GAUtils {
 		return jdbcTemplate;
 	}
 
-	/**
-	 * 通过科室名称,按dlmc分组查询相关数据信息
-	 * @param str
-	 * @return
-	 */
 	public static List<Map<String, Object>> query(String str) {
 
 		String sql = "select dlmc,xs,sum(xs*sl) as sum from jxgl.ksxlfmx where hszmc=? and sl>0 group by dlmc";
@@ -77,8 +82,8 @@ public class GAUtils {
 
 		String ks1 = "妇科护理站";
 		String ks2 = "介入科护理站";
-		List<Map<String, Object>> list = GAUtils.query(ks1); // 查询某个科室对应的检查项目的信息，group by dlmc
-		List<Map<String, Object>> list2 = GAUtils.query(ks2);
+		List<Map<String, Object>> list = GAUtils2.query(ks1); // 查询某个科室对应的检查项目的信息，group by dlmc
+		List<Map<String, Object>> list2 = GAUtils2.query(ks2);
 
 		List<String> dlmcList1 = new ArrayList<String>(); // 存储某个科室对应的所有检查项目,无重复的
 		List<String> dlmcList2 = new ArrayList<String>();
@@ -181,8 +186,8 @@ public class GAUtils {
 	}
 
 	public static void newMethod(String ks1, String ks2) {
-		List<Map<String, Object>> list1 = GAUtils.query(ks1); // 查询某个科室对应的检查项目的信息，group by dlmc
-		List<Map<String, Object>> list2 = GAUtils.query(ks2);
+		List<Map<String, Object>> list1 = GAUtils2.query(ks1); // 查询某个科室对应的检查项目的信息，group by dlmc
+		List<Map<String, Object>> list2 = GAUtils2.query(ks2);
 
 		List<String> dlmcList1 = new ArrayList<String>(); // 存储某个科室对应的所有检查项目,无重复的
 		List<String> dlmcList2 = new ArrayList<String>();
@@ -293,35 +298,120 @@ public class GAUtils {
 	}
 
 	public static void method_v3(String ks1, String ks2) {
-		List<Map<String, Object>> list_ks1 = query(ks1);
-		List<Map<String, Object>> list_ks2 = query(ks2);
-		double sum_ks1 = 0,sum_ks2 = 0;
-		for (Map<String,Object> map : list_ks1) {
-			sum_ks1 += (Double)map.get("sum");
-			gaList.add((Double)map.get("sum"));
-			gaMap.put((String) map.get("dlmc"), (Double)map.get("sum"));
+		// 初始化gaValueList
+		gaList = new ArrayList<Double>();
+		gaValueList = new ArrayList<CondGene>();
+
+		List<Map<String, Object>> list1 = GAUtils2.query(ks1); // 查询某个科室对应的检查项目的信息，group by dlmc
+		List<Map<String, Object>> list2 = GAUtils2.query(ks2);
+
+		List<String> dlmcList1 = new ArrayList<String>(); // 存储某个科室对应的所有检查项目,无重复的
+		List<String> dlmcList2 = new ArrayList<String>();
+
+		double sum_ks1 = 0, sum_ks2 = 0;
+		for (Map<String, Object> map : list1) {
+			dlmcList1.add((String) map.get("dlmc"));
+			sum_ks1 += (Double) map.get("sum");
 		}
-		for (Map<String,Object> map : list_ks2) {
-			sum_ks2 += (Double)map.get("sum");
-			gaList.add((Double)map.get("sum"));
-			gaMap.put((String) map.get("dlmc"), (Double)map.get("sum"));
+		for (Map<String, Object> map : list2) {
+			dlmcList2.add((String) map.get("dlmc"));
+			sum_ks2 += (Double) map.get("sum");
 		}
-		System.out.println("gaList.size(): "+gaList.size()+"\t"+"gaMap.size(): "+gaMap.size());
-		System.out.println("sum_ks1: "+sum_ks1+"\t"+"sum_ks2: "+sum_ks2);
-//		value = sum_ks2 - sum_ks1;
-		flag = list_ks1.size();
+		System.out.println("sum_ks1: " + sum_ks1 + "\t sum_ks2: " + sum_ks2);
+		System.out.println(dlmcList1);
+		System.out.println(dlmcList1.size());
+		System.out.println(dlmcList2);
+		System.out.println(dlmcList2.size());
+		List<String> unique_dlmc = new ArrayList<String>();
+		for (String dlmc : dlmcList1) {
+			if (!dlmcList2.contains(dlmc)) {
+				unique_dlmc.add(dlmc);
+			}
+		}
+		for (String dlmc : dlmcList2) {
+			if (!dlmcList1.contains(dlmc)) {
+				unique_dlmc.add(dlmc);
+			}
+		}
+		System.out.println(unique_dlmc);
+		System.out.println("unique_dlmc.size(): " + unique_dlmc.size());
+
+		// 遍历unique_dlmc,为idmap赋值
+		for (String string : unique_dlmc) {
+			if (!idmap.containsKey(string)) {
+				idmap.put(string, counter);
+				counter++; // 计数器加1
+				weight_map.put(string, 0.0);	// 用来存储遗传算法计算出来的值
+			}
+		}
+		System.out.println("idmap: " + idmap);
+		System.out.println("idmap.size() : " + idmap.size());
+		System.out.println("counter: " + counter);
+
+		CondExpress condExpress = new CondExpress();
+		/**
+		 * 获取不重复的科室对应的dlmc所对应的和
+		 */
+		double com_sum_ks1 = 0, com_sum_ks2 = 0; // 定义共同的dlmc的和
+		for (Map<String, Object> map : list1) {
+			boolean tag = true;
+			for (String dlmc : unique_dlmc) {
+				if (((String) map.get("dlmc")).equals(dlmc)) {
+					tag = false;
+
+					CondGene condGene = new CondGene();
+					condGene.setId(dlmc);
+					condGene.setValue((Double) map.get("sum"));
+					gaValueList.add(condGene);
+
+					gaList.add((Double) map.get("sum"));
+				}
+			}
+			if (tag) {
+				com_sum_ks1 += (Double) map.get("sum");
+			}
+		}
+		flag = gaList.size();
+		// condExpress.flag = gaList.size();
+		condExpress.setFlag(gaValueList.size());
+
+		for (Map<String, Object> map : list2) {
+			boolean tag = true;
+			for (String dlmc : unique_dlmc) {
+				if (((String) map.get("dlmc")).equals(dlmc)) {
+					tag = false;
+					gaList.add((Double) map.get("sum"));
+
+					CondGene condGene = new CondGene();
+					condGene.setId(dlmc);
+					condGene.setValue((Double) map.get("sum"));
+					gaValueList.add(condGene);
+				}
+			}
+			// 共同的dlmc
+			if (tag) {
+				com_sum_ks2 += (Double) map.get("sum");
+			}
+		}
+		System.out.println("com_Sum_ks1: " + com_sum_ks1 + "\tcom_sum_ks2: " + com_sum_ks2);
+		value = com_sum_ks2 - com_sum_ks1;
+		condExpress.setValue(value);
+
+		condExpress.setValueList(gaValueList);
+		condlist.add(condExpress);
 	}
-	
-	public static boolean geneticAlgorithem(double value, int flag, List<Double> gaList) throws Exception {
+
+	public static boolean geneticAlgorithem(int gennum, Map<String, Integer> idmap, List<CondExpress> condlist)
+			throws Exception {
 		Configuration conf = new DefaultConfiguration();
 		conf.setPreservFittestIndividual(true);
-		FitnessFunction myfunction = new GADemoFunctionFitness2(value, flag, gaList);
+		FitnessFunction myfunction = new GADemoFunctionFitness1(gennum, idmap, condlist);
 		conf.setFitnessFunction(myfunction);
 
 		/**
 		 * 动态设置基因个数
 		 */
-		Gene[] sampleGene = new Gene[gaList.size()];
+		Gene[] sampleGene = new Gene[idmap.size()];
 		for (int i = 0; i < sampleGene.length; i++) {
 			sampleGene[i] = new DoubleGene(conf, 0.5, 3); // 定义基因的取值范围，即系数的取值范围
 		}
@@ -353,30 +443,69 @@ public class GAUtils {
 		System.out.println("The best solution has a fitness value of " + bestSolutionSoFar.getFitnessValue());
 		// bestSolutionSoFar.setFitnessValueDirectly(-1);
 
-		if (v1 != 1) {
+		if (v1 > 1000) {
 			System.out.println("It contains the following: ");
 			// for (int i = 0; i < sampleGene.length; i++) {
 			// double gene_value = GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar,
 			// i);
 			// System.out.println(gene_value);
 			// }
-			Set<Entry<String, Double>> entrySet = gaMap.entrySet();
-			int count = 0;
-			for (Entry<String, Double> entry : entrySet) {
-				double gene_value = GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar, count);
-				gaMap.put(entry.getKey(), gene_value);
-				count++;
-				System.out.println(gene_value);
+			
+//			Set<Entry<String, Double>> entrySet = gaMap.entrySet();
+//			int count = 0;
+//			for (Entry<String, Double> entry : entrySet) {
+//				double gene_value = GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar, count);
+//				gaMap.put(entry.getKey(), gene_value);
+//				count++;
+//				System.out.println(gene_value);
+//			}
+			
+			// double sum1 = 0;
+			// double sum2 = 0;
+			// for (int i = 0; i < sampleGene.length - flag; i++) {
+			// sum1 += GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar, i) *
+			// gaList.get(i);
+			// }
+			// for (int i = flag; i < sampleGene.length; i++) {
+			// sum2 += GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar, i) *
+			// gaList.get(i);
+			// }
+			// System.out.println(sum1 - sum2 + "\t" + value);
+
+			/**
+			 * 遍历 基因
+			 */
+			for (int i = 0; i < condlist.size(); i++) {
+
+				double sum_1 = 0;
+				double sum_2 = 0;
+
+				for (int j = 0; j < condlist.get(i).getValueList().size() - condlist.get(i).getFlag(); j++) {
+					sum_1 += (Double) bestSolutionSoFar
+							.getGene(idmap.get(condlist.get(i).getValueList().get(j).getId())).getAllele()
+							* condlist.get(i).getValueList().get(j).getValue();
+				}
+
+				for (int k = condlist.get(i).getFlag(); k < condlist.get(i).getValueList().size(); k++) {
+					sum_2 += (Double) bestSolutionSoFar
+							.getGene(idmap.get(condlist.get(i).getValueList().get(k).getId())).getAllele()
+							* condlist.get(i).getValueList().get(k).getValue();
+				}
+				
+				double xx = sum_1 - sum_2;
+				System.out.println("xx: " + xx + "\t value: " + condlist.get(i).getValue());
 			}
-			double sum1 = 0;
-			double sum2 = 0;
-			for (int i = 0; i < sampleGene.length - flag; i++) {
-				sum1 += GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar, i) * gaList.get(i);
+			
+			/**
+			 * 对 weight_map 赋值
+			 */
+			Set<Entry<String,Integer>> entrySet = idmap.entrySet();
+			for (Entry<String, Integer> entry : entrySet) {
+				weight_map.put(entry.getKey(), (Double)bestSolutionSoFar.getGene(entry.getValue()).getAllele());
 			}
-			for (int i = flag; i < sampleGene.length; i++) {
-				sum2 += GADemoFunctionFitness2.getValueAtGene(bestSolutionSoFar, i) * gaList.get(i);
-			}
-			System.out.println(sum1 - sum2 + "\t" + value);
+			System.out.println("weight_map: "+weight_map);
+			System.out.println("weight_map.size(): "+weight_map.size());
+
 			return true;
 		} else {
 			System.out.println("无法满足约束条件，请改变基因的取值范围！");
@@ -453,12 +582,12 @@ public class GAUtils {
 				}
 			}
 		}
-		System.out.println(gaMap_adjust);	// 最后要存储的值
+		System.out.println(gaMap_adjust); // 最后要存储的值
 	}
-	
+
 	public static void savaData() {
-		Map<String,Double> data = gaMap_adjust;
-		Set<Entry<String,Double>> entrySet = data.entrySet();
+		Map<String, Double> data = gaMap_adjust;
+		Set<Entry<String, Double>> entrySet = data.entrySet();
 		String zbid = UUID.randomUUID().toString().replace("-", "");
 		// 指标id,新产生一个,或者从数据库中查一个已存在的
 		int len = zbid.length();
@@ -469,59 +598,69 @@ public class GAUtils {
 			Double value = entry.getValue();
 			String createTime = new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date());
 			String updateTime = createTime;
-//			List<Object> list = new ArrayList<Object>();
-//			list.add(id);
-//			list.add(zbid);
-//			list.add(dlmc);
-//			list.add(value);
-//			list.add(createTime);
-//			list.add(updateTime);
-			//参数列表不能使用List
+			// List<Object> list = new ArrayList<Object>();
+			// list.add(id);
+			// list.add(zbid);
+			// list.add(dlmc);
+			// list.add(value);
+			// list.add(createTime);
+			// list.add(updateTime);
+			// 参数列表不能使用List
 			/**
 			 * Object ... 表示参数的个数是不确定的
 			 */
-//			jdbcTemplate.update(sql, new Object[] {id,zbid,dlmc,value,createTime,updateTime});
-			jdbcTemplate.update(sql, id,zbid,dlmc,value,createTime,updateTime);
-//			jdbcTemplate.update("insert into temp_zb values('11','22','33',4.4,'22','33')");
+			// jdbcTemplate.update(sql, new Object[]
+			// {id,zbid,dlmc,value,createTime,updateTime});
+			jdbcTemplate.update(sql, id, zbid, dlmc, value, createTime, updateTime);
+			// jdbcTemplate.update("insert into temp_zb
+			// values('11','22','33',4.4,'22','33')");
 		}
 	}
 
 	public static void main(String[] args) throws Exception {
 		jdbcTemplate = getJdbcTemplate();
-		String ks1 = "产科护理站";
-		// String ks1 = "眼科三护理站";
-		// String ks1 = "妇科护理站";
-		String ks2 = "介入科护理站";
-		// String ks2 = "眼科一护理站";
 
-		/**
-		 * 查询非聚合的数据，重新求和
-		 */
-		String sql = "select dlmc,xs,sl from jxgl.ksxlfmx where hszmc=? and sl>0";
-		/**
-		 * 求list3,list4的代码要提出去
-		 */
-		list3 = jdbcTemplate.queryForList(sql, ks1); // 查询某个科室对应的检查项目的详细信息，没有group by
-		list4 = jdbcTemplate.queryForList(sql, ks2);
+//		 String ks[][] = { { "产科护理站", "介入科护理站" }, { "产科护理站", "妇科护理站" } };
+		String ks[][] = { { "产科护理站", "介入科护理站" }, { "眼科一护理站", "妇科护理站" } };
+		for (int i = 0; i < 2; i++) {
+			String ks1 = "产科护理站";
+			ks1 = ks[i][0];
+			// String ks1 = "眼科三护理站";
+			// String ks1 = "妇科护理站";
+			String ks2 = "介入科护理站";
+			ks2 = ks[i][1];
+			// String ks2 = "眼科一护理站";
 
-		// list3.forEach(System.out::print); jdk1.8 打印List
-		newMethod(ks1, ks2);
-//		method_v3(ks1, ks2);
-		
-		System.out.println("value: " + value);
-		System.out.println("gaList: " + gaList);
-		System.out.println("gaList.size(): " + gaList.size());
-		System.out.println("flag: " + flag);
-		System.out.println("*******************************\n");
-		boolean boo = geneticAlgorithem(value, flag, gaList);
-		System.out.println("gaMap: " + gaMap); // 最后用来更新系数的数据
-		System.out.println("gaMap.size(): " + gaMap.size()); // 最后用来更新系数的数据
-		if (boo) {
-			// 调整系数，并重新求和
-			// adjustWeight();
-			// caculateSum();
-			realAdjustWeight();
-//			savaData();
+			/**
+			 * 查询非聚合的数据，重新求和
+			 */
+			String sql = "select dlmc,xs,sl from jxgl.ksxlfmx where hszmc=? and sl>0";
+			/**
+			 * 求list3,list4的代码要提出去
+			 */
+			// list3 = jdbcTemplate.queryForList(sql, ks1); // 查询某个科室对应的检查项目的详细信息，没有group by
+			// list4 = jdbcTemplate.queryForList(sql, ks2);
+
+			// list3.forEach(System.out::print); jdk1.8 打印List
+			// newMethod(ks1, ks2);
+			method_v3(ks1, ks2);
+
+			System.out.println("value: " + value);
+			System.out.println("gaList: " + gaList);
+			System.out.println("gaList.size(): " + gaList.size());
+			System.out.println("flag: " + flag);
+			System.out.println("*******************************\n");
+
 		}
+		boolean boo = geneticAlgorithem(idmap.size(), idmap, condlist);
+		// System.out.println("gaMap: " + gaMap); // 最后用来更新系数的数据
+		// System.out.println("gaMap.size(): " + gaMap.size()); // 最后用来更新系数的数据
+		// if (boo) {
+		// // 调整系数，并重新求和
+		// // adjustWeight();
+		// // caculateSum();
+		// realAdjustWeight();
+		// savaData();
+		// }
 	}
 }

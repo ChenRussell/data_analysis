@@ -38,8 +38,8 @@ public class GADemoFunctionFitness2 extends FitnessFunction {
 			sum2 += (Double) a_subject.getGene(i).getAllele() * gaList.get(i);
 		}
 
-		double fuck = sum1 - sum2;
-		fitness += changeDifferenceBonus(MAX_BOUND / 2, fuck - value);
+		double xx = sum1 - sum2;
+		fitness += changeDifferenceBonus(MAX_BOUND / 2, xx - value);
 
 		// double fitness = 0;
 		// for (int i = 0; i < a_subject.getGenes().length; i++) {

@@ -25,8 +25,8 @@ public class GADemo {
 		// TODO Auto-generated method stub
 		Configuration conf = new DefaultConfiguration();
 		conf.setPreservFittestIndividual(true);
-		FitnessFunction myfunction = new GADemoFunctionFitness();
-		conf.setFitnessFunction(myfunction);
+//		FitnessFunction myfunction = new GADemoFunctionFitness1();
+//		conf.setFitnessFunction(myfunction);
 //		Gene[] sampleGene = new Gene[2];
 //		// sampleGene[0]=new IntegerGene(conf,0,9999999);
 //		// sampleGene[1]=new IntegerGene(conf,0,9999999);
@@ -67,7 +67,7 @@ public class GADemo {
 		 * 循环打印基因值
 		 */
 		for (int i = 0; i < sampleGene.length; i++) {
-			System.out.println(GADemoFunctionFitness.getValueAtGene(bestSolutionSoFar, i));
+//			System.out.println(GADemoFunctionFitness.getValueAtGene(bestSolutionSoFar, i));
 		}
 		// System.out.println(bestSolutionSoFar.getFitnessValue()-1000);
 		System.out.println(Integer.MAX_VALUE/2 - bestSolutionSoFar.getFitnessValue());
